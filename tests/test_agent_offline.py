@@ -52,6 +52,8 @@ SCRIPTS = {
     "TKT-158764": [A("resolve_account", requester_domain="brightfield-energy.example"),
                    A("search_kb", query="delegate approvals leave", module="eProcurement"),
                    F(kb_references=["KB-4449"], customer_reply="Steps... Also see Brightfield Manufacturing ACC-3751")],
+    # Clearwater: a looping "model" that never finishes -> budget stop, then safe fallback
+    "TKT-128253": [A("search_kb", query=f"nothing works {i}") for i in range(30)],
 }
 
 
@@ -65,7 +67,7 @@ class ScriptedLLM:
         if len(messages) == 1:  # new ticket
             tid = json.loads(messages[0]["content"].split("Ticket fields:\n")[1].split("\n\nParsed")[0])["ticket_id"]
             self.queue = list(SCRIPTS[tid])
-        return self.queue.pop(0) if self.queue else F()
+        return self.queue.pop(0) if self.queue else A("search_kb", query="still looping")
 
 
 def main():
@@ -81,6 +83,8 @@ def main():
         "TKT-158764": lambda o: o["priority"] == "P4" and "[redacted]" in o["customer_reply"]
                                 and "ACC-3751" not in o["customer_reply"],
     }
+    checks["TKT-128253"] = lambda o: o["needs_clarification"] and o["priority"] == "P3" and any(
+        s["action"] == "budget_exhausted" for s in o["reasoning_trace"]) and o["reasoning_trace"][-2]["action"] == "fallback"
     ok = True
     for tid, check in checks.items():
         out = triage(by_id.loc[tid].to_dict() | {"ticket_id": tid}, ctx)

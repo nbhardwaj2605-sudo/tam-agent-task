@@ -396,8 +396,6 @@ def triage(ticket: dict, ctx: Context) -> dict:
         trace.append(e)
 
     for turn in range(MAX_LLM_TURNS):
-        if tool_calls >= MAX_TOOL_CALLS:
-            messages.append({"role": "user", "content": "Tool budget exhausted. Call finish now with your best decision."})
         try:
             raw = ctx.llm.chat(messages, system=system, max_tokens=1500, json_mode=True)
         except Exception as e:  # provider/network error: stop the loop, fall back below
@@ -423,6 +421,10 @@ def triage(ticket: dict, ctx: Context) -> dict:
             log("finish", "decision", f"{inp['category']}/{inp['priority']} -> {inp['route_to']}", thought)
             break
 
+        if tool_calls >= MAX_TOOL_CALLS:
+            log("budget_exhausted", name, "tool budget used up; model told to finish", thought)
+            messages.append({"role": "user", "content": "Tool budget exhausted. Call finish now with your best decision."})
+            continue
         if name not in tools:
             log("unknown_tool", name, "not a valid tool", thought)
             messages.append({"role": "user", "content": f"Unknown action '{name}'. Valid: {list(tools)} or finish."})

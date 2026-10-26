@@ -40,6 +40,7 @@ def main():
     with open(OUT / "run_log.jsonl", "a") as log:
         for tid in ids:
             t0, calls0 = time.time(), ctx.llm.calls
+            tin0, tout0 = getattr(ctx.llm, "input_tokens", 0), getattr(ctx.llm, "output_tokens", 0)
             rec = {"ticket_id": tid}
             try:
                 ticket = by_id.loc[tid].to_dict() | {"ticket_id": tid}
@@ -50,7 +51,14 @@ def main():
                 ok += not errs
             except Exception as e:
                 rec |= {"status": "exception", "errors": [repr(e)], "traceback": traceback.format_exc(limit=3)}
-            rec |= {"seconds": round(time.time() - t0, 2), "llm_calls": ctx.llm.calls - calls0}
+            rec |= {"seconds": round(time.time() - t0, 2), "llm_calls": ctx.llm.calls - calls0,
+                    "input_tokens": getattr(ctx.llm, "input_tokens", 0) - tin0,
+                    "output_tokens": getattr(ctx.llm, "output_tokens", 0) - tout0,
+                    "provider": ctx.llm.provider if hasattr(ctx.llm, "provider") else None,
+                    "model": getattr(ctx.llm, "model", None)}
+            if rec["status"] == "ok":
+                rec |= {"category": result["category"], "priority": result["priority"], "route_to": result["route_to"],
+                        "steps": len(result["reasoning_trace"])}
             log.write(json.dumps(rec) + "\n")
             print(f"{tid}: {rec['status']} ({rec['seconds']}s, {rec['llm_calls']} LLM calls)")
     print(f"\n{ok}/{len(ids)} tickets produced valid output")
