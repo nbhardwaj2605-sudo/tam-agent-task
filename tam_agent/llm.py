@@ -29,30 +29,51 @@ class LLMClient:
         self.model = model or os.getenv("LLM_MODEL", {
             "ollama": "llama3.1:8b", "anthropic": "claude-sonnet-4-5", "openai": "gpt-4o-mini"}[self.provider])
         self.calls = 0  # simple counter you can report for cost/latency
+        self.input_tokens = 0
+        self.output_tokens = 0
+        self._client = None  # SDK client is created once and reused
 
     def chat(self, messages: list[dict], system: str | None = None, max_tokens: int = 1024,
-             temperature: float = 0.0) -> str:
-        """messages: [{"role": "user"|"assistant", "content": str}] -> assistant text."""
+             temperature: float = 0.0, json_mode: bool = False) -> str:
+        """messages: [{"role": "user"|"assistant", "content": str}] -> assistant text.
+
+        json_mode asks the provider for a JSON object where supported (Ollama `format`,
+        OpenAI `response_format`). The agent still parses defensively.
+        """
         self.calls += 1
         if self.provider == "anthropic":
             import anthropic
-            client = anthropic.Anthropic()
-            resp = client.messages.create(model=self.model, max_tokens=max_tokens, temperature=temperature,
-                                          system=system or "", messages=messages)
+            self._client = self._client or anthropic.Anthropic()
+            resp = self._client.messages.create(model=self.model, max_tokens=max_tokens, temperature=temperature,
+                                                system=system or "", messages=messages)
+            self.input_tokens += resp.usage.input_tokens
+            self.output_tokens += resp.usage.output_tokens
             return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
         if self.provider == "openai":
             from openai import OpenAI
-            client = OpenAI()
+            self._client = self._client or OpenAI()
             msgs = ([{"role": "system", "content": system}] if system else []) + messages
-            resp = client.chat.completions.create(model=self.model, messages=msgs, max_tokens=max_tokens,
-                                                  temperature=temperature)
+            kw = {"response_format": {"type": "json_object"}} if json_mode else {}
+            resp = self._client.chat.completions.create(model=self.model, messages=msgs, max_tokens=max_tokens,
+                                                        temperature=temperature, **kw)
+            if resp.usage:
+                self.input_tokens += resp.usage.prompt_tokens
+                self.output_tokens += resp.usage.completion_tokens
             return resp.choices[0].message.content or ""
         if self.provider == "ollama":
             host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
             msgs = ([{"role": "system", "content": system}] if system else []) + messages
-            body = json.dumps({"model": self.model, "messages": msgs, "stream": False,
-                               "options": {"temperature": temperature, "num_predict": max_tokens}}).encode()
-            req = urllib.request.Request(f"{host}/api/chat", data=body, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=300) as r:
-                return json.loads(r.read())["message"]["content"]
+            # Ollama's default context window (2-4k) is too small for a multi-step agent conversation.
+            opts = {"temperature": temperature, "num_predict": max_tokens,
+                    "num_ctx": int(os.getenv("OLLAMA_NUM_CTX", "16384"))}
+            payload = {"model": self.model, "messages": msgs, "stream": False, "options": opts}
+            if json_mode:
+                payload["format"] = "json"
+            req = urllib.request.Request(f"{host}/api/chat", data=json.dumps(payload).encode(),
+                                         headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=600) as r:
+                data = json.loads(r.read())
+            self.input_tokens += data.get("prompt_eval_count", 0)
+            self.output_tokens += data.get("eval_count", 0)
+            return data["message"]["content"]
         raise ValueError(f"Unknown LLM_PROVIDER: {self.provider}")
