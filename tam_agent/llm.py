@@ -27,7 +27,7 @@ class LLMClient:
     def __init__(self, provider: str | None = None, model: str | None = None):
         self.provider = (provider or os.getenv("LLM_PROVIDER", "ollama")).lower()
         self.model = model or os.getenv("LLM_MODEL", {
-            "ollama": "llama3.1:8b", "anthropic": "claude-sonnet-4-5", "openai": "gpt-4o-mini"}[self.provider])
+            "ollama": "llama3.1:8b", "anthropic": "claude-sonnet-5-5", "openai": "gpt-4o-mini"}[self.provider])
         self.calls = 0  # simple counter you can report for cost/latency
         self.input_tokens = 0
         self.output_tokens = 0
