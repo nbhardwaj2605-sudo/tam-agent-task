@@ -10,6 +10,7 @@ You may replace this file, add native tool calling, or use a framework
 """
 import json
 import os
+import time
 import urllib.request
 from pathlib import Path
 
@@ -39,7 +40,26 @@ class LLMClient:
 
         json_mode asks the provider for a JSON object where supported (Ollama `format`,
         OpenAI `response_format`). The agent still parses defensively.
+        Rate-limit / overload errors (common on free tiers) are retried with backoff.
+        LLM_MAX_TOKENS raises the output cap (needed for "thinking" models such as Gemini 2.5,
+        whose hidden reasoning counts against max_tokens).
         """
+        max_tokens = max(max_tokens, int(os.getenv("LLM_MAX_TOKENS", "0") or 0))
+        retries = int(os.getenv("LLM_RETRIES", "6"))
+        for attempt in range(retries + 1):
+            try:
+                return self._chat_once(messages, system, max_tokens, temperature, json_mode)
+            except Exception as e:  # noqa: BLE001 - provider SDKs raise different types
+                msg = repr(e).lower()
+                transient = any(k in msg for k in ("429", "rate", "quota", "overloaded", "503", "529",
+                                                   "timeout", "temporarily", "resource_exhausted"))
+                if not transient or attempt == retries:
+                    raise
+                wait = min(60, 5 * 2 ** attempt)
+                print(f"  [llm] transient error ({type(e).__name__}); retrying in {wait}s")
+                time.sleep(wait)
+
+    def _chat_once(self, messages, system, max_tokens, temperature, json_mode) -> str:
         self.calls += 1
         if self.provider == "anthropic":
             import anthropic
