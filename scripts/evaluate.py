@@ -83,7 +83,7 @@ def main():
         field_hits = Counter()
         kb_hits = kb_total = 0
         rule_pass = 0
-        print(f"{'ticket':<11} {'expected -> got':<52} fields  KB   hard rule")
+        print(f"{'ticket':<11} {'expected -> got':<56}  fields  KB    hard rule")
         for tid in scored:
             g, o = gold[tid], outs[tid]
             ok = {f: matches(g[f], o.get(f)) for f in FIELDS if f in g}
@@ -98,7 +98,7 @@ def main():
             rule_pass += rp
             exp = f"{g['category'] if isinstance(g['category'], str) else '/'.join(g['category'])}/{g['priority']}"
             got = f"{o['category']}/{o['priority']}->{o['route_to']}"
-            print(f"{tid:<11} {exp + " -> " + got:<52} {sum(ok.values())}/{len(ok)}    "
+            print(f"{tid:<11} {exp + ' -> ' + got:<56}  {sum(ok.values())}/{len(ok)}    "
                   f"{kb_ok}/{len(must) + len(must_not)}  {'PASS' if rp else 'FAIL'} {rule or ''}")
             misses = [f"{f}: expected {g[f]}, got {o.get(f)}" for f, v in ok.items() if not v]
             for m in misses:

@@ -235,17 +235,26 @@ class Toolbox:
     def get_usage_trend(self, account_id: str, months: int = 6) -> dict:
         u = self.idx.usage.get(account_id)
         if u is None or u.empty:
-            return {"error": f"no usage for {account_id}"}
-        u = u.tail(max(int(months), 4))
+            out = {"account_id": account_id, "trend_available": False, "declined_more_than_25pct": False,
+                   "note": "No usage data for this account. Treat the usage trend as unknown; do not infer one."}
+            self.facts["usage"] = out
+            return out
+        u = u.tail(max(int(months or 6), 4))
         rows = u[["month", "active_users", "login_rate_pct", "tickets_opened"]].to_dict("records")
         au = list(u["active_users"])
+        if len(au) < 4 or not au[-4]:
+            out = {"account_id": account_id, "monthly": rows, "trend_available": False,
+                   "declined_more_than_25pct": False,
+                   "note": "Fewer than 4 months of usage data: the 3-month trend is unavailable; do not infer one."}
+            self.facts["usage"] = out
+            return out
         # "declined over the last 3 months": latest month vs the month 3 months earlier
         base, latest = au[-4], au[-1]
-        change = round((latest - base) / base * 100, 1) if base else None
-        out = {"account_id": account_id, "monthly": rows,
+        change = round((latest - base) / base * 100, 1)
+        out = {"account_id": account_id, "monthly": rows, "trend_available": True,
                "active_users_3m_change_pct": change,
                "active_users_3m_window": f"{u['month'].iloc[-4]} -> {u['month'].iloc[-1]}",
-               "declined_more_than_25pct": change is not None and change < -25}
+               "declined_more_than_25pct": change < -25}
         self.facts["usage"] = out
         return out
 
@@ -280,12 +289,18 @@ class Toolbox:
             if (r.status in ("open", "pending_customer") and age_days <= 7 and my_mod and r.module_canon == my_mod
                     and same_symptom):
                 s["duplicate_candidate"] = True
+                s["duplicate_match"] = "error_code" if my_codes else "symptom"
                 dups.append(r.ticket_id)
+                self.facts.setdefault("duplicate_matches", {})[r.ticket_id] = {
+                    "match": s["duplicate_match"], "created_at": r.created_at,
+                    "customer_priority": r.customer_priority or None}
             s["age_days"] = round(age_days, 1)
             out.append(s)
         self.facts.setdefault("duplicate_candidates", [])
         self.facts["duplicate_candidates"] = sorted(set(self.facts["duplicate_candidates"]) | set(dups))
-        return {"account_id": account_id, "current_ticket_module_canonical": my_mod,
+        extra = {} if out else {"note": "No tickets matched. Widen days_back or drop the module/error_code filter "
+                                        "before concluding there is no history."}
+        return extra | {"account_id": account_id, "current_ticket_module_canonical": my_mod,
                 "current_ticket_error_codes": my_codes, "window_days": days_back,
                 "count": len(out), "tickets": out[:15],
                 "duplicate_candidates": dups,
@@ -336,7 +351,11 @@ class Toolbox:
             ranked.append((s, kid))
         ranked.sort(reverse=True)
         hits = [self._kb_brief(k, s) for s, k in ranked[:top_k] if s > 0]
-        return {"query": query, "module": mod, "error_code": error_code or None, "results": hits}
+        out = {"query": query, "module": mod, "error_code": error_code or None, "results": hits}
+        if not hits:
+            out["note"] = ("No matching articles. Do not assume one exists: try a broader query, drop the module "
+                           "filter, or search the error code alone.")
+        return out
 
     def get_kb_article(self, kb_id: str) -> dict:
         kb_id = (kb_id or "").strip().upper()

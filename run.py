@@ -27,6 +27,7 @@ def main():
 
     tickets = load_tickets()
     ctx = Context(load_accounts(), tickets, load_usage(), load_kb())
+    print(f"LLM provider: {ctx.llm.provider} | model: {ctx.llm.model}\n")
     if args.ids:
         ids = args.ids
     elif args.set == "sample":

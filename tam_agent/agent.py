@@ -181,6 +181,8 @@ def summarize(action: str, obs: dict) -> str:
                     f"open escalations {obs['open_escalations']}, SSO changed {obs['sso_enabled_or_reconfigured']} "
                     f"({obs['days_since_sso_change']} days ago), NPS {obs['nps_last']}")
         if action == "get_usage_trend":
+            if not obs.get("trend_available", True):
+                return "usage trend UNAVAILABLE: " + obs.get("note", "")
             au = [r["active_users"] for r in obs["monthly"]]
             return f"active users {au}; 3-month change {obs['active_users_3m_change_pct']}% ({obs['active_users_3m_window']})"
         if action == "search_tickets":
@@ -188,6 +190,8 @@ def summarize(action: str, obs: dict) -> str:
                           f"{','.join(x['error_codes'])} '{x['subject'][:40]}'" for x in obs["tickets"][:5])
             return f"{obs['count']} tickets in {obs['window_days']}d: {t or 'none'}. Duplicate candidates: {obs['duplicate_candidates'] or 'none'}"
         if action == "search_kb":
+            if not obs["results"]:
+                return "no results - " + obs.get("note", "")
             return "; ".join(f"{r['kb_id']} '{r['title'][:50]}' [{r['type']}/{r['status']}]" for r in obs["results"])
         if action in ("get_kb_article", "get_policy"):
             return (f"{obs['kb_id']} '{obs['title']}' [{obs['type']}/{obs['status']}]"
@@ -250,7 +254,16 @@ def apply_guardrails(d: dict, tb: Toolbox, ticket: dict, ctx: Context) -> list[s
         d["duplicate_of"] = None
         _add_ref(d, ctx, "data_exposure")
 
-    # 4. Duplicates: only accept a duplicate the ticket search actually verified (KB-5930)
+    # 4. Duplicates (KB-5930). The rule is exact, so it is checked from data like the risk override:
+    #    an error-code match the model missed is applied; a model's duplicate is accepted only if verified.
+    if acc and "duplicate_candidates" not in tb.facts and d["category"] != "security":
+        tb.search_tickets(acc)  # the model never looked at ticket history
+    matches = tb.facts.get("duplicate_matches", {})
+    code_matches = sorted((m["created_at"], t) for t, m in matches.items() if m["match"] == "error_code")
+    if not d.get("duplicate_of") and code_matches and d["category"] != "security":
+        d["duplicate_of"] = code_matches[-1][1]  # the most recent open ticket with the same error code
+        notes.append(f"KB-5930 duplicate missed by model: same account, module and error code as open "
+                     f"{d['duplicate_of']} within 7 days -> duplicate_of set")
     cands = tb.facts.get("duplicate_candidates", [])
     if d.get("duplicate_of") and d["category"] != "security":
         if d["duplicate_of"] not in cands:
@@ -265,6 +278,12 @@ def apply_guardrails(d: dict, tb: Toolbox, ticket: dict, ctx: Context) -> list[s
             if d["escalate"]:
                 notes.append("duplicate: escalate cleared (KB-5930: do not re-escalate)")
                 d["escalate"] = False
+            orig_p = matches.get(d["duplicate_of"], {}).get("customer_priority")
+            if orig_p in _RANK and d["priority"] != orig_p:
+                notes.append(f"duplicate: keeps original ticket's priority {orig_p} (KB-5930)")
+                d["priority"] = d["base_priority"] = orig_p
+            if d["route_to"] == "security":
+                d["route_to"] = "L1_support"
             _add_ref(d, ctx, "duplicates")
     elif d["category"] == "duplicate":
         notes.append("category duplicate without a verified original; needs_info instead")
@@ -279,8 +298,11 @@ def apply_guardrails(d: dict, tb: Toolbox, ticket: dict, ctx: Context) -> list[s
                 notes.append("needs_info: base priority P3, needs_clarification true (KB-2914)")
             d.update(base_priority="P3", needs_clarification=True)
 
-    # 6. How-to and feature requests are P4 by definition (before any risk override)
-    if d["category"] in ("how_to", "feature_request") and d["base_priority"] != "P4":
+    # 6. How-to questions and feature requests are P4 by definition (before any risk override).
+    #    A ticket that reports an error code is a failure report, not a how-to question: left to the model.
+    has_error = bool(extract_error_codes(ticket.get("error_code", ""), text))
+    if (d["category"] == "feature_request" or (d["category"] == "how_to" and not has_error)) \
+            and d["base_priority"] != "P4":
         notes.append(f"{d['category']}: base priority {d['base_priority']} -> P4 (KB-2914 definitions)")
         d["base_priority"] = "P4"
 
@@ -300,6 +322,11 @@ def apply_guardrails(d: dict, tb: Toolbox, ticket: dict, ctx: Context) -> list[s
         if d["priority"] != d["base_priority"]:
             notes.append(f"no risk override applies: priority {d['priority']} -> {d['base_priority']}")
             d["priority"] = d["base_priority"]
+
+    if tb.facts.get("usage_unavailable"):
+        notes.append("renewal within 90 days but usage trend unavailable: risk override judged on escalations only")
+        if "usage trend unavailable" not in d["internal_note"].lower():
+            d["internal_note"] += " Usage trend unavailable (insufficient data); not inferred."
 
     # 8. Escalate on P1
     if d["priority"] == "P1" and not d["escalate"] and d["category"] != "duplicate":
@@ -322,6 +349,16 @@ def apply_guardrails(d: dict, tb: Toolbox, ticket: dict, ctx: Context) -> list[s
     if route != d["route_to"]:
         notes.append(f"route {d['route_to']} -> {route} (KB-2914 routing)")
         d["route_to"] = route
+
+    # 9b. Active incident: reference it rather than opening a parallel escalation path
+    for k in d["kb_references"]:
+        a = ctx.idx.kb.get(str(k).strip().upper())
+        if a and a["meta"].get("status") == "active_incident":
+            inc = re.findall(r"INC-[\w-]+", a["body"])
+            ref = inc[0] if inc else a["id"]
+            if ref not in d["internal_note"]:
+                notes.append(f"linked to active incident {ref} ({a['id']}) in internal note")
+                d["internal_note"] += f" Linked to active incident {ref} ({a['id']})."
 
     # 10. KB references: must exist; deprecated -> successor
     refs = []
@@ -373,6 +410,8 @@ def _risk_override(tb: Toolbox, acc: str | None) -> str | None:
     usage = tb.facts.get("usage") if tb.facts.get("usage", {}).get("account_id") == acc else tb.get_usage_trend(acc)
     if usage.get("declined_more_than_25pct"):
         reasons.append(f"active users {usage['active_users_3m_change_pct']}% over 3 months")
+    if not usage.get("trend_available", True):
+        tb.facts["usage_unavailable"] = True  # the guardrails note it and lower confidence
     if not reasons:
         return None
     return f"renewal in {prof['days_to_renewal']} days and " + " and ".join(reasons)
