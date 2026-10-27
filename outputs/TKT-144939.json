@@ -1,0 +1,93 @@
+{
+  "ticket_id": "TKT-144939",
+  "account_id": "ACC-3751",
+  "category": "incident",
+  "priority": "P1",
+  "route_to": "L2_engineering",
+  "escalate": true,
+  "notify_tam": true,
+  "duplicate_of": null,
+  "needs_clarification": false,
+  "kb_references": [
+    "KB-3985"
+  ],
+  "account_signals": [
+    "Active incident KB-3985 identified",
+    "Account is Premium tier",
+    "TAM notification required per KB-3985"
+  ],
+  "customer_reply": "Thank you for reporting this. We have identified that the E-4102 error you are experiencing is related to an active incident (INC-26-0418) affecting invoice OCR processing following our recent 26.2.3 release. Our engineering team is actively working on a hotfix. As a workaround, please switch affected invoice channels to Manual Entry mode (Admin > eInvoice > Channels) and hold month-end OCR batches until the hotfix is deployed, or process critical invoices manually. We have escalated this ticket to our L2 Engineering team for monitoring and have notified your TAM.",
+  "internal_note": "Confirmed active incident KB-3985 (INC-26-0418). Account is Premium, so TAM notification is required per KB-3985 instructions. Routing to L2 Engineering.",
+  "confidence": 1.0,
+  "reasoning_trace": [
+    {
+      "step": 1,
+      "action": "search_kb",
+      "input": "{\"query\": \"E-4102\", \"module\": \"eInvoice\", \"error_code\": \"E-4102\"}",
+      "observation": "KB-3985 'KNOWN ISSUE: Invoice OCR jobs fail with E-4102 aft' [known_issue/active_incident]; KB-7914 'E-4102: Invoice ocr job stays stuck in processing' [troubleshooting/current]; KB-9799 'E-4211: Invoice ocr job returns a validation error' [troubleshooting/current]; KB-9216 'How to: Upload invoices for OCR' [how_to/current]; KB-9094 'Configuration reference: Credit memo default' [reference/current]",
+      "thought": "The customer is reporting a critical failure in the eInvoice module (error E-4102) affecting all OCR processing, which is blocking month-end operations. I need to check if this is a known incident and verify the account status for potential risk overrides."
+    },
+    {
+      "step": 2,
+      "action": "get_account_profile",
+      "input": "{\"account_id\": \"ACC-3751\"}",
+      "observation": "Brightfield Manufacturing Premium, renewal 2026-12-04 (45 days), open escalations 0, SSO changed None (None days ago), NPS 5",
+      "thought": "The issue is a known active incident (KB-3985). I need to check the account profile to see if an account risk override applies, which would require notifying the TAM."
+    },
+    {
+      "step": 3,
+      "action": "get_usage_trend",
+      "input": "{\"account_id\": \"ACC-3751\", \"months\": 3}",
+      "observation": "active users [799, 747, 797, 741]; 3-month change -7.3% (2026-07 -> 2026-10)",
+      "thought": "The account is within 90 days of renewal (45 days). I need to check the usage trend to see if active users have declined by more than 25% to determine if an account risk override applies."
+    },
+    {
+      "step": 4,
+      "action": "parse_error",
+      "input": "",
+      "observation": "model reply was not a JSON action; asked to retry",
+      "thought": "{\n  \"category\": \"incident\",\n  \"base_priority\": \"P1\",\n  \"priority\": \"P1\",\n  \"route_to\": \"L2_engineering\",\n  \"escalate\": true,\n  \"notify_tam\": false,\n  \"duplicate_of\": null,\n  \"needs_clarification\": fal"
+    },
+    {
+      "step": 5,
+      "action": "self_review",
+      "input": "decision",
+      "observation": "sent back before finishing: You have not resolved the account (resolve_account). You have not read any KB article in full (get_kb_article); search titles miss the handling rules inside the article.",
+      "thought": "The issue is a confirmed active incident (KB-3985). The account is within 90 days of renewal, but usage has not declined by >25%, so no risk override is triggered. The ticket is a P1 incident and must be routed to L2 Engineering."
+    },
+    {
+      "step": 6,
+      "action": "resolve_account",
+      "input": "{\"requester_domain\": \"brightfield-manufacturing.example\", \"company_name\": \"Brightfield Manufacturing\"}",
+      "observation": "ACC-3751 Brightfield Manufacturing (exact domain match); similar names NOT used: ACC-6035 Copperfield Manufacturing, ACC-8880 Granite Manufacturing",
+      "thought": "I need to resolve the account to ensure I have the correct account ID and read the active incident KB article to confirm the handling instructions."
+    },
+    {
+      "step": 7,
+      "action": "get_kb_article",
+      "input": "{\"kb_id\": \"KB-3985\"}",
+      "observation": "KB-3985 'KNOWN ISSUE: Invoice OCR jobs fail with E-4102 after release 26.2.3' [known_issue/active_incident]; links ['KB-2914', 'KB-7914']",
+      "thought": "Account resolved successfully. Now reading the active incident KB article to ensure I have the correct handling instructions."
+    },
+    {
+      "step": 8,
+      "action": "parse_error",
+      "input": "",
+      "observation": "model reply was not a JSON action; asked to retry",
+      "thought": "{\n  \"category\": \"incident\",\n  \"base_priority\": \"P1\",\n  \"priority\": \"P1\",\n  \"route_to\": \"L2_engineering\",\n  \"escalate\": true,\n  \"notify_tam\": true,\n  \"duplicate_of\": null,\n  \"needs_clarification\": fals"
+    },
+    {
+      "step": 9,
+      "action": "finish",
+      "input": "decision",
+      "observation": "incident/P1 -> L2_engineering",
+      "thought": "The issue is a confirmed active incident (KB-3985/INC-26-0418). The account is Premium, which requires TAM notification per the KB article instructions. The ticket is a P1 incident and must be routed to L2 Engineering."
+    },
+    {
+      "step": 10,
+      "action": "policy_guardrails",
+      "input": "deterministic checks: account, untrusted content, security, duplicates, needs-info, risk override, escalation, routing, KB refs, data leakage",
+      "observation": "all checks passed - no changes"
+    }
+  ]
+}

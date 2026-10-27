@@ -1,0 +1,63 @@
+{
+  "ticket_id": "TKT-128253",
+  "account_id": "ACC-3737",
+  "category": "needs_info",
+  "priority": "P3",
+  "route_to": "L1_support",
+  "escalate": false,
+  "notify_tam": false,
+  "duplicate_of": null,
+  "needs_clarification": true,
+  "kb_references": [],
+  "account_signals": [
+    "Vague ticket description",
+    "No account risk override applicable",
+    "Account confirmed via domain match"
+  ],
+  "customer_reply": "Thank you for reaching out. I am sorry to hear you are experiencing issues. To help us investigate and resolve this as quickly as possible, could you please provide more details? Specifically, which module are you having trouble with (e.g., Contracts, Sourcing), what is the exact error message or behavior you are seeing, and are other users experiencing the same issue?",
+  "internal_note": "Ticket is critically underspecified. No module or error provided. Following policy for insufficient information. Account confirmed as ACC-3737.",
+  "confidence": 1.0,
+  "reasoning_trace": [
+    {
+      "step": 1,
+      "action": "get_account_profile",
+      "input": "{\"account_id\": \"ACC-3737\"}",
+      "observation": "Clearwater Manufacturing Standard, renewal 2027-08-16 (300 days), open escalations 0, SSO changed None (None days ago), NPS 6",
+      "thought": "The ticket provides no information about the module, error, or specific symptoms. I need to gather more information to triage this correctly. I will also check the account profile to see if there are any known issues or if the account risk override applies."
+    },
+    {
+      "step": 2,
+      "action": "self_review",
+      "input": "decision",
+      "observation": "sent back before finishing: You have not resolved the account (resolve_account).",
+      "thought": "The ticket is extremely vague ('NOTHING WORKS'). I have checked the account profile and there are no active escalations or renewal risks. Since the module and symptoms are unknown, I must follow the policy for insufficient information: set to P3, mark as needs_clarification, and request specific details."
+    },
+    {
+      "step": 3,
+      "action": "resolve_account",
+      "input": "{\"requester_domain\": \"clearwater-manufacturing.example\", \"company_name\": \"Clearwater Manufacturing\"}",
+      "observation": "ACC-3737 Clearwater Manufacturing (exact domain match); similar names NOT used: ACC-5620 Tidewater Manufacturing, ACC-8679 Harbor Manufacturing",
+      "thought": "I need to resolve the account to ensure the account_id is correctly mapped to the requester domain before finalizing."
+    },
+    {
+      "step": 4,
+      "action": "parse_error",
+      "input": "",
+      "observation": "model reply was not a JSON action; asked to retry",
+      "thought": "{\"category\": \"needs_info\", \"base_priority\": \"P3\", \"priority\": \"P3\", \"route_to\": \"L1_support\", \"escalate\": false, \"notify_tam\": false, \"duplicate_of\": null, \"needs_clarification\": true, \"kb_references\""
+    },
+    {
+      "step": 5,
+      "action": "finish",
+      "input": "decision",
+      "observation": "needs_info/P3 -> L1_support",
+      "thought": "The account has been confirmed as ACC-3737. The ticket remains critically underspecified. I have sufficient information to categorize this as 'needs_info' and request clarification from the user."
+    },
+    {
+      "step": 6,
+      "action": "policy_guardrails",
+      "input": "deterministic checks: account, untrusted content, security, duplicates, needs-info, risk override, escalation, routing, KB refs, data leakage",
+      "observation": "all checks passed - no changes"
+    }
+  ]
+}
