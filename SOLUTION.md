@@ -15,7 +15,8 @@ ticket ──► LLM ──{"thought","action","input"}──► tool ──obse
 - **Guardrails (`apply_guardrails`).** The LLM decides; code enforces the non-negotiables and logs every correction as a trace step: domain-resolved account; data-exposure detection → Security/P1/escalate; duplicates only if `search_tickets` verified them, never re-escalated; needs-info → P3; how-to/feature → P4 base; **risk override computed from data** (the model outputs `base_priority`; code raises one level, max P2, and sets TAM + escalate); P1 → escalate; routing; deprecated KB refs → successor; other customers' names/IDs redacted from replies; embedded instructions flagged. Each correction lowers confidence.
 
 ## 2. Evaluation
-- Build a labelled gold set (~300 tickets, stratified by category, tier and trap type), with labels from 2 support engineers and inter-rater agreement measured.
+- **Already implemented for the review set:** `eval/gold_review.json` holds my expected label for each ticket with the reason; `scripts/evaluate.py` reports per-field accuracy, one must-not-fail check per ticket, a privacy check on every reply, and tool calls, corrections, latency and tokens. 20 unit tests cover the tools and guardrails.
+- Scale that up to a labelled gold set (~300 tickets, stratified by category, tier and trap type), labelled by 2 support engineers with inter-rater agreement measured.
 - Per-field accuracy: category, route, escalate, notify_tam, duplicate_of. Priority as accuracy plus a cost-weighted confusion matrix (under-prioritising P1 costs far more than over-prioritising P4).
 - Hard-rule recall must be 100%: security reports, active incidents, risk overrides. Report these separately, never averaged away.
 - Retrieval: recall@5 / MRR of the correct current KB article, plus deprecated-article citation rate (target 0).
@@ -41,7 +42,10 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt            # + anthropic or openai if used
 cp .env.example .env                       # set LLM_PROVIDER / LLM_MODEL / key
 python scripts/validate_data.py
-python tests/test_agent_offline.py         # plumbing test with a scripted LLM, no key needed
+python tests/test_agent_offline.py         # loop test with a scripted LLM, no key needed
+python -m pytest -q                        # 20 unit tests (pip install pytest)
 python run.py --set review
 python scripts/check_outputs.py            # expect 10/10 valid
+python scripts/evaluate.py                 # accuracy vs eval/gold_review.json + behaviour stats
+python scripts/report.py                   # outputs/report.html: step-by-step trace viewer
 ```
