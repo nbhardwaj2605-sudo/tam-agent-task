@@ -101,6 +101,9 @@ finish: submit the decision. input:
 - If you cannot determine the module or symptom, do not guess: category needs_info, P3,
   needs_clarification true, and ask for module, exact error text, affected users and time of failure.
 - In customer replies, give the documented resolution steps or workaround from the current KB article.
+- When a policy or KB article lists things to tell or ask the customer (e.g. pausing an affected sourcing
+  event, or the details to provide: module, error text, affected users, time of failure), include every one
+  of them in the customer reply.
 """
 
 

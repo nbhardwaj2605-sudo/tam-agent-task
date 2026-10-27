@@ -12,10 +12,10 @@
     "KB-6401"
   ],
   "account_signals": [
-    "Report of unauthorized access to competitor bid data (data exposure)."
+    "Report of unauthorized access to competitor bid data (data exposure)"
   ],
-  "customer_reply": "Thank you for bringing this to our attention. We take the confidentiality of your procurement data very seriously. I have escalated this report to our Security team as a high-priority incident for immediate investigation. We will update you as soon as we have more information.",
-  "internal_note": "Customer reported a potential data exposure where a supplier could see competitor bids during a reverse auction. This is a P1 security incident. Routing to Security team.",
+  "customer_reply": "Thank you for bringing this to our attention. We take reports of potential data exposure very seriously. I have escalated this to our Security team as a top priority. We are currently investigating the incident involving the reverse auction. Please provide the following details to assist our investigation: the exact time of the auction, the names of the affected suppliers, and any screenshots or logs if available. We will update you as soon as we have more information.",
+  "internal_note": "Customer reported a supplier could see competitor bid amounts. This is a clear data exposure event. Routing to Security team immediately as P1 per policy.",
   "confidence": 1.0,
   "reasoning_trace": [
     {
@@ -23,28 +23,28 @@
       "action": "get_account_profile",
       "input": "{\"account_id\": \"ACC-7533\"}",
       "observation": "Silverline Energy Enterprise, renewal 2027-08-24 (308 days), open escalations 0, SSO changed 2022-07-14 (1559 days ago), NPS 9",
-      "thought": "The customer is reporting that a supplier could see another supplier's bid amounts during a reverse auction. This is a potential data exposure issue (bids are confidential). I need to verify the account details and check if this is a known issue or a security incident."
+      "thought": "The customer is reporting that a supplier could see another supplier's bid amounts during a reverse auction. This is a potential data exposure issue. According to the support policy, any report of data exposure must be treated as a security issue, routed to the Security team, set to P1, and escalated. I need to verify the account status and check for any known security incidents or related tickets."
     },
     {
       "step": 2,
       "action": "self_review",
       "input": "decision",
       "observation": "sent back before finishing: You have not resolved the account (resolve_account).",
-      "thought": "The report of a supplier seeing another supplier's bid amounts is a critical data exposure issue. According to the data_exposure policy, this must be treated as a security incident. I need to route this to the Security team immediately, set it to P1, and escalate it."
+      "thought": "The report of a supplier seeing another supplier's bid amounts is a critical data exposure issue. Per the data_exposure policy, this must be treated as a security incident. I will route this to the Security team as a P1, escalate it, and notify the customer that we are investigating this as a high-priority security matter."
     },
     {
       "step": 3,
       "action": "resolve_account",
-      "input": "{\"requester_domain\": \"silverline-energy.example\", \"company_name\": \"Silverline Energy\", \"account_id\": \"ACC-7533\"}",
-      "observation": "ACC-7533 Silverline Energy (exact domain match); similar names NOT used: ACC-2717 Starling Energy, ACC-5714 Silverline Telecom",
-      "thought": "I need to confirm the account identity before finalizing the security incident report."
+      "input": "{\"requester_domain\": \"silverline-energy.example\", \"account_id\": \"ACC-7533\"}",
+      "observation": "ACC-7533 Silverline Energy (exact domain match)",
+      "thought": "I need to resolve the account to ensure the account_id ACC-7533 is correctly linked to the requester domain silverline-energy.example before finalizing the security report."
     },
     {
       "step": 4,
       "action": "finish",
       "input": "decision",
       "observation": "security/P1 -> security",
-      "thought": "Account confirmed as ACC-7533. The report of a supplier seeing another supplier's bid amounts is a critical data exposure issue. According to the data_exposure policy, this must be treated as a security incident. I am routing this to the Security team immediately, setting it to P1, and escalating it."
+      "thought": "The account has been verified. The report of a supplier seeing another supplier's bid amounts is a critical data exposure issue. Per the data_exposure policy, this must be treated as a security incident. I will route this to the Security team as a P1, escalate it, and notify the customer that we are investigating this as a high-priority security matter."
     },
     {
       "step": 5,
