@@ -176,3 +176,13 @@ def test_renewal_90_day_boundary(data, renewal, expected):
     prof = Toolbox(c.idx, ticket(c, "TKT-119877")).get_account_profile("ACC-2431")
     assert _days_until("2027-01-18") == 90
     assert prof["renewal_within_90_days"] is expected
+
+
+# 11. Policy-mandated reply content -----------------------------------------------------------------
+def test_security_reply_for_sourcing_event_advises_pause(ctx):
+    t = ticket(ctx, "TKT-135081")
+    tb = Toolbox(ctx.idx, t)
+    d = json.loads(finish(category="security", base_priority="P1", priority="P1", route_to="security",
+                          escalate=True, customer_reply="Security is engaged."))["input"]
+    apply_guardrails(d, tb, t, ctx)
+    assert "pause the affected sourcing event" in d["customer_reply"]

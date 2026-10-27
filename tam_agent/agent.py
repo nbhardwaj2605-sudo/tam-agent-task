@@ -256,6 +256,14 @@ def apply_guardrails(d: dict, tb: Toolbox, ticket: dict, ctx: Context) -> list[s
         d.update(priority="P1", base_priority="P1", route_to="security", escalate=True)
         d["duplicate_of"] = None
         _add_ref(d, ctx, "data_exposure")
+        # KB-6401 step 5: for sourcing events, advise pausing the event until Security confirms containment
+        is_sourcing = normalize_module(ticket.get("module")) == "Sourcing" or re.search(
+            r"\b(auction|rfx|rfp|rfq|sourcing event|bid)", text, re.I)
+        if is_sourcing and "pause" not in d["customer_reply"].lower():
+            d["customer_reply"] = d["customer_reply"].rstrip() + (
+                " As a precaution, please pause the affected sourcing event until our Security team "
+                "confirms containment.")
+            notes.append("KB-6401: added advice to pause the affected sourcing event")
 
     # 4. Duplicates (KB-5930). The rule is exact, so it is checked from data like the risk override:
     #    an error-code match the model missed is applied; a model's duplicate is accepted only if verified.
@@ -435,6 +443,11 @@ def review_gaps(tb: Toolbox, d: dict, called: set[str], ctx: Context) -> list[st
     if d.get("category") not in ("security",) and "search_tickets" not in called and tb.facts.get("account_id"):
         gaps.append("You have not checked this account's recent tickets (search_tickets); a related or duplicate "
                     "ticket changes the decision.")
+    if d.get("category") == "security":
+        exposure = [k for k, a in ctx.idx.policies.items() if "exposure" in a["meta"]["title"].lower()]
+        if exposure and exposure[0] not in tb.facts.get("kb_read", []):
+            gaps.append("You classified this as security but have not read the data-exposure policy "
+                        "(get_policy topic data_exposure); it says what the reply must contain.")
     read = [k for k in tb.facts.get("kb_read", []) if k not in ctx.idx.policies]
     if d.get("category") not in ("needs_info", "security") and not read:
         gaps.append("You have not read any KB article in full (get_kb_article); search titles miss the handling "

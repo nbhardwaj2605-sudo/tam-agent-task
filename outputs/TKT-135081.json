@@ -14,8 +14,8 @@
   "account_signals": [
     "Report of unauthorized access to competitor bid data (data exposure)"
   ],
-  "customer_reply": "Thank you for bringing this to our attention. We take reports of potential data exposure very seriously. I have escalated this to our Security team as a top priority. We are currently investigating the incident involving the reverse auction. Please provide the following details to assist our investigation: the exact time of the auction, the names of the affected suppliers, and any screenshots or logs if available. We will update you as soon as we have more information.",
-  "internal_note": "Customer reported a supplier could see competitor bid amounts. This is a clear data exposure event. Routing to Security team immediately as P1 per policy.",
+  "customer_reply": "Thank you for bringing this to our attention. We take reports of potential data exposure very seriously. I have escalated this to our Security team as a top priority. We are currently investigating the incident involving the reverse auction. Please pause the affected sourcing event until our Security team confirms containment. To assist our investigation, please provide the exact time of the auction, the names of the affected suppliers, and any screenshots or logs if available. We will update you as soon as we have more information.",
+  "internal_note": "Customer reported a supplier could see competitor bid amounts. This is a clear data exposure event. Routing to Security team immediately as P1 per policy KB-6401. Included instruction to pause the event.",
   "confidence": 1.0,
   "reasoning_trace": [
     {
@@ -29,25 +29,32 @@
       "step": 2,
       "action": "self_review",
       "input": "decision",
-      "observation": "sent back before finishing: You have not resolved the account (resolve_account).",
+      "observation": "sent back before finishing: You have not resolved the account (resolve_account). You classified this as security but have not read the data-exposure policy (get_policy topic data_exposure); it says what the reply must contain.",
       "thought": "The report of a supplier seeing another supplier's bid amounts is a critical data exposure issue. Per the data_exposure policy, this must be treated as a security incident. I will route this to the Security team as a P1, escalate it, and notify the customer that we are investigating this as a high-priority security matter."
     },
     {
       "step": 3,
       "action": "resolve_account",
-      "input": "{\"requester_domain\": \"silverline-energy.example\", \"account_id\": \"ACC-7533\"}",
-      "observation": "ACC-7533 Silverline Energy (exact domain match)",
-      "thought": "I need to resolve the account to ensure the account_id ACC-7533 is correctly linked to the requester domain silverline-energy.example before finalizing the security report."
+      "input": "{\"requester_domain\": \"silverline-energy.example\", \"company_name\": \"Silverline Energy\"}",
+      "observation": "ACC-7533 Silverline Energy (exact domain match); similar names NOT used: ACC-2717 Starling Energy, ACC-5714 Silverline Telecom",
+      "thought": "I need to resolve the account to ensure I have the correct account ID and then read the data_exposure policy to ensure my response meets the required standards for a security incident."
     },
     {
       "step": 4,
-      "action": "finish",
-      "input": "decision",
-      "observation": "security/P1 -> security",
-      "thought": "The account has been verified. The report of a supplier seeing another supplier's bid amounts is a critical data exposure issue. Per the data_exposure policy, this must be treated as a security incident. I will route this to the Security team as a P1, escalate it, and notify the customer that we are investigating this as a high-priority security matter."
+      "action": "get_policy",
+      "input": "{\"topic\": \"data_exposure\"}",
+      "observation": "KB-6401 'Handling suspected data exposure between suppliers or tenants' [policy/current]; links ['KB-2914']",
+      "thought": "I have confirmed the account ID. Now I must read the data_exposure policy to ensure my customer reply includes all required elements before finalizing the ticket."
     },
     {
       "step": 5,
+      "action": "finish",
+      "input": "decision",
+      "observation": "security/P1 -> security",
+      "thought": "I have confirmed the account and read the data_exposure policy (KB-6401). I must now update my response to include the instruction to pause the affected sourcing event and ensure I do not speculate on the cause, as per the policy."
+    },
+    {
+      "step": 6,
       "action": "policy_guardrails",
       "input": "deterministic checks: account, untrusted content, security, duplicates, needs-info, risk override, escalation, routing, KB refs, data leakage",
       "observation": "all checks passed - no changes"
