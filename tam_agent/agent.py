@@ -10,6 +10,9 @@ How it works (see SOLUTION.md for the diagram):
                                   are sent back and the LLM fixes them
      The LLM decides which tool to call next, whether it needs more information,
      and when to stop. A hard budget (MAX_TOOL_CALLS) prevents runaway loops.
+     Before accepting `finish`, a one-time self-review sends the model back if it skipped
+     a step a careful engineer would not (ticket history, reading the article, following
+     an article's link). The model chooses whether to act on it.
   3. Deterministic policy guardrails check the decision against hard rules
      (security, risk override, duplicates, untrusted content, data leakage).
      Every correction is written to the reasoning trace.
@@ -376,6 +379,33 @@ def _risk_override(tb: Toolbox, acc: str | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# Self-review before finishing
+# ---------------------------------------------------------------------------
+def review_gaps(tb: Toolbox, d: dict, called: set[str], ctx: Context) -> list[str]:
+    """Investigation steps a careful engineer would not skip. Returned as questions to the model,
+    which may do them or confirm its decision. Generic checks only - nothing ticket-specific."""
+    gaps = []
+    if not tb.facts.get("account_id"):
+        gaps.append("You have not resolved the account (resolve_account).")
+    if "get_account_profile" not in called:
+        gaps.append("You have not checked the account profile (tier, renewal, escalations); TAM notification and "
+                    "the risk override depend on it.")
+    if d.get("category") not in ("security",) and "search_tickets" not in called and tb.facts.get("account_id"):
+        gaps.append("You have not checked this account's recent tickets (search_tickets); a related or duplicate "
+                    "ticket changes the decision.")
+    read = [k for k in tb.facts.get("kb_read", []) if k not in ctx.idx.policies]
+    if d.get("category") not in ("needs_info", "security") and not read:
+        gaps.append("You have not read any KB article in full (get_kb_article); search titles miss the handling "
+                    "rules inside the article.")
+    for k in read:  # articles whose steps point to another article
+        body = ctx.idx.kb[k]["body"]
+        for ref in dict.fromkeys(re.findall(r"KB-\d+", body)):
+            if ref != k and ref in ctx.idx.kb and ref not in ctx.idx.policies and ref not in read:
+                gaps.append(f"{k} refers to {ref} in its content and you have not read {ref}.")
+    return gaps
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 def triage(ticket: dict, ctx: Context) -> dict:
@@ -386,6 +416,8 @@ def triage(ticket: dict, ctx: Context) -> dict:
     messages = [{"role": "user", "content": _ticket_message(ticket)}]
     trace: list[dict] = []
     seen_calls: set[str] = set()
+    called: set[str] = set()
+    reviewed = False  # the self-review runs at most once per ticket
     tool_calls = 0
     decision = None
 
@@ -398,9 +430,10 @@ def triage(ticket: dict, ctx: Context) -> dict:
     for turn in range(MAX_LLM_TURNS):
         try:
             raw = ctx.llm.chat(messages, system=system, max_tokens=1500, json_mode=True)
-        except Exception as e:  # provider/network error: stop the loop, fall back below
-            log("llm_error", "", repr(e)[:300])
-            break
+        except Exception as e:
+            # Provider/network/auth failure (retries already exhausted in llm.py). Fail loudly:
+            # a placeholder decision here would look like a valid triage when the model never ran.
+            raise RuntimeError(f"LLM call failed ({ctx.llm.provider}/{ctx.llm.model}): {e!r}") from e
         messages.append({"role": "assistant", "content": raw})
         act = parse_action(raw)
         if act is None:
@@ -416,6 +449,14 @@ def triage(ticket: dict, ctx: Context) -> dict:
                 log("finish_rejected", "decision", "; ".join(errs), thought)
                 messages.append({"role": "user", "content": "Decision rejected: " + "; ".join(errs) +
                                                             ". Fix these fields and call finish again."})
+                continue
+            gaps = review_gaps(tb, inp, called, ctx) if not reviewed and tool_calls < MAX_TOOL_CALLS else []
+            reviewed = True
+            if gaps:
+                log("self_review", "decision", "sent back before finishing: " + " ".join(gaps), thought)
+                messages.append({"role": "user", "content": "Before finishing, check these gaps in your "
+                                 "investigation. Do the missing steps, or call finish again if one truly does not "
+                                 "apply:\n- " + "\n- ".join(gaps)})
                 continue
             decision = inp
             log("finish", "decision", f"{inp['category']}/{inp['priority']} -> {inp['route_to']}", thought)
@@ -436,6 +477,7 @@ def triage(ticket: dict, ctx: Context) -> dict:
                                                         "observation, call a different tool, or finish."})
             continue
         seen_calls.add(key)
+        called.add(name)
         tool_calls += 1
         fn = tools[name][0]
         try:

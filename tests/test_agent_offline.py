@@ -61,13 +61,20 @@ class ScriptedLLM:
     def __init__(self):
         self.calls, self.input_tokens, self.output_tokens = 0, 0, 0
         self.queue = []
+        self.last_finish = None
 
     def chat(self, messages, system=None, **kw):
         self.calls += 1
         if len(messages) == 1:  # new ticket
             tid = json.loads(messages[0]["content"].split("Ticket fields:\n")[1].split("\n\nParsed")[0])["ticket_id"]
             self.queue = list(SCRIPTS[tid])
-        return self.queue.pop(0) if self.queue else A("search_kb", query="still looping")
+            self.last_finish = None
+        if messages[-1]["content"].startswith("Before finishing") and self.last_finish:
+            return self.last_finish  # scripted model confirms its decision after the self-review
+        out = self.queue.pop(0) if self.queue else A("search_kb", query="still looping")
+        if '"finish"' in out:
+            self.last_finish = out
+        return out
 
 
 def main():
